@@ -25,7 +25,7 @@ function LoginPageClient() {
       const storageType = (window as any).RUNTIME_CONFIG?.STORAGE_TYPE;
       setShouldAskUsername(storageType && storageType !== 'localstorage');
       setEnableRegister(
-        Boolean((window as any).RUNTIME_CONFIG?.ENABLE_REGISTER)
+        Boolean((window as any).RUNTIME_CONFIG?.ENABLE_REGISTER),
       );
     }
   }, []);
@@ -48,8 +48,10 @@ function LoginPageClient() {
       });
 
       if (res.ok) {
-        const redirect = searchParams.get('redirect') || '/';
-        router.replace(redirect);
+        const redirect = searchParams.get('redirect');
+        router.replace(
+          redirect && /^\/(?![/\\])/.test(redirect) ? redirect : '/',
+        );
       } else if (res.status === 401) {
         setError('密码错误');
       } else {
@@ -77,8 +79,10 @@ function LoginPageClient() {
       });
 
       if (res.ok) {
-        const redirect = searchParams.get('redirect') || '/';
-        router.replace(redirect);
+        const redirect = searchParams.get('redirect');
+        router.replace(
+          redirect && /^\/(?![/\\])/.test(redirect) ? redirect : '/',
+        );
       } else {
         const data = await res.json().catch(() => ({}));
         setError(data.error ?? '服务器错误');

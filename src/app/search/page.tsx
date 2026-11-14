@@ -101,31 +101,17 @@ function SearchPageClient() {
       'searchHistoryUpdated',
       (newHistory: string[]) => {
         setSearchHistory(newHistory);
-      }
+      },
     );
 
     return unsubscribe;
   }, []);
 
-  useEffect(() => {
-    // 当搜索参数变化时更新搜索状态
-    const query = searchParams.get('q');
-    if (query) {
-      setSearchQuery(query);
-      fetchSearchResults(query);
-
-      // 保存到搜索历史 (事件监听会自动更新界面)
-      addSearchHistory(query);
-    } else {
-      setShowResults(false);
-    }
-  }, [searchParams]);
-
   const fetchSearchResults = async (query: string) => {
     try {
       setIsLoading(true);
       const response = await fetch(
-        `/api/search?q=${encodeURIComponent(query.trim())}`
+        `/api/search?q=${encodeURIComponent(query.trim())}`,
       );
       const data = await response.json();
       setSearchResults(
@@ -153,7 +139,7 @@ function SearchPageClient() {
               return parseInt(a.year) > parseInt(b.year) ? -1 : 1;
             }
           }
-        })
+        }),
       );
       setShowResults(true);
     } catch (error) {
@@ -162,6 +148,20 @@ function SearchPageClient() {
       setIsLoading(false);
     }
   };
+
+  useEffect(() => {
+    // 当搜索参数变化时更新搜索状态
+    const query = searchParams.get('q');
+    if (query) {
+      setSearchQuery(query);
+      fetchSearchResults(query);
+
+      // 保存到搜索历史 (事件监听会自动更新界面)
+      addSearchHistory(query);
+    } else {
+      setShowResults(false);
+    }
+  }, [searchParams]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -307,7 +307,7 @@ function SearchPageClient() {
                       onClick={() => {
                         setSearchQuery(item);
                         router.push(
-                          `/search?q=${encodeURIComponent(item.trim())}`
+                          `/search?q=${encodeURIComponent(item.trim())}`,
                         );
                       }}
                       className='px-4 py-2 bg-gray-500/10 hover:bg-gray-300 rounded-full text-sm text-gray-700 transition-colors duration-200 dark:bg-gray-700/50 dark:hover:bg-gray-600 dark:text-gray-300'

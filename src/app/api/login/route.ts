@@ -1,6 +1,7 @@
 /* eslint-disable no-console,@typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from 'next/server';
 
+import { accessSessionCookie, issueAccessSession } from '@/lib/access-session';
 import { getConfig } from '@/lib/config';
 import { db } from '@/lib/db';
 
@@ -9,15 +10,12 @@ export const runtime = 'edge';
 // 读取存储类型环境变量，默认 localstorage
 const STORAGE_TYPE =
   (process.env.NEXT_PUBLIC_STORAGE_TYPE as
-    | 'localstorage'
-    | 'redis'
-    | 'd1'
-    | undefined) || 'localstorage';
+    'localstorage' | 'redis' | 'd1' | undefined) || 'localstorage';
 
 // 生成签名
 async function generateSignature(
   data: string,
-  secret: string
+  secret: string,
 ): Promise<string> {
   const encoder = new TextEncoder();
   const keyData = encoder.encode(secret);
@@ -29,7 +27,7 @@ async function generateSignature(
     keyData,
     { name: 'HMAC', hash: 'SHA-256' },
     false,
-    ['sign']
+    ['sign'],
   );
 
   // 生成签名
@@ -42,17 +40,12 @@ async function generateSignature(
 }
 
 // 生成认证Cookie（带签名）
-async function generateAuthCookie(
-  username?: string,
-  password?: string,
-  includePassword = false
-): Promise<string> {
-  const authData: any = {};
-
-  // 只在需要时包含 password
-  if (includePassword && password) {
-    authData.password = password;
-  }
+async function generateAuthCookie(username: string): Promise<string> {
+  const authData: {
+    username?: string;
+    signature?: string;
+    timestamp?: number;
+  } = {};
 
   if (username && process.env.PASSWORD) {
     authData.username = username;
@@ -95,22 +88,16 @@ export async function POST(req: NextRequest) {
       if (password !== envPassword) {
         return NextResponse.json(
           { ok: false, error: '密码错误' },
-          { status: 401 }
+          { status: 401 },
         );
       }
 
       // 验证成功，设置认证cookie
       const response = NextResponse.json({ ok: true });
-      const cookieValue = await generateAuthCookie(undefined, password, true); // localstorage 模式包含 password
-      const expires = new Date();
-      expires.setDate(expires.getDate() + 7); // 7天过期
-
-      response.cookies.set('auth', cookieValue, {
-        path: '/',
-        expires,
-        sameSite: 'lax', // 改为 lax 以支持 PWA
-        httpOnly: false, // PWA 需要客户端可访问
-        secure: false, // 根据协议自动设置
+      const { name, ...options } = accessSessionCookie;
+      response.cookies.set(name, await issueAccessSession(envPassword), {
+        ...options,
+        secure: req.nextUrl.protocol === 'https:',
       });
 
       return response;
@@ -133,7 +120,7 @@ export async function POST(req: NextRequest) {
     ) {
       // 验证成功，设置认证cookie
       const response = NextResponse.json({ ok: true });
-      const cookieValue = await generateAuthCookie(username, password, false); // 数据库模式不包含 password
+      const cookieValue = await generateAuthCookie(username); // 数据库模式不包含 password
       const expires = new Date();
       expires.setDate(expires.getDate() + 7); // 7天过期
 
@@ -162,13 +149,13 @@ export async function POST(req: NextRequest) {
       if (!pass) {
         return NextResponse.json(
           { error: '用户名或密码错误' },
-          { status: 401 }
+          { status: 401 },
         );
       }
 
       // 验证成功，设置认证cookie
       const response = NextResponse.json({ ok: true });
-      const cookieValue = await generateAuthCookie(username, password, false); // 数据库模式不包含 password
+      const cookieValue = await generateAuthCookie(username); // 数据库模式不包含 password
       const expires = new Date();
       expires.setDate(expires.getDate() + 7); // 7天过期
 

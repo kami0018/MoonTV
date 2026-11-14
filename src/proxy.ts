@@ -2,9 +2,10 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 
+import { verifyAccessSession } from '@/lib/access-session';
 import { getAuthInfoFromCookie } from '@/lib/auth';
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // 跳过不需要认证的路径
@@ -19,19 +20,20 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // localstorage模式：在middleware中完成验证
+  if (storageType === 'localstorage') {
+    const session = request.cookies.get('moontv-session')?.value;
+    if (!(await verifyAccessSession(session, process.env.PASSWORD))) {
+      return handleAuthFailure(request, pathname);
+    }
+    return NextResponse.next();
+  }
+
   // 从cookie获取认证信息
   const authInfo = getAuthInfoFromCookie(request);
 
   if (!authInfo) {
     return handleAuthFailure(request, pathname);
-  }
-
-  // localstorage模式：在middleware中完成验证
-  if (storageType === 'localstorage') {
-    if (!authInfo.password || authInfo.password !== process.env.PASSWORD) {
-      return handleAuthFailure(request, pathname);
-    }
-    return NextResponse.next();
   }
 
   // 其他模式：只验证签名
@@ -45,7 +47,7 @@ export async function middleware(request: NextRequest) {
     const isValidSignature = await verifySignature(
       authInfo.username,
       authInfo.signature,
-      process.env.PASSWORD || ''
+      process.env.PASSWORD || '',
     );
 
     // 签名验证通过即可
@@ -62,7 +64,7 @@ export async function middleware(request: NextRequest) {
 async function verifySignature(
   data: string,
   signature: string,
-  secret: string
+  secret: string,
 ): Promise<boolean> {
   const encoder = new TextEncoder();
   const keyData = encoder.encode(secret);
@@ -75,12 +77,12 @@ async function verifySignature(
       keyData,
       { name: 'HMAC', hash: 'SHA-256' },
       false,
-      ['verify']
+      ['verify'],
     );
 
     // 将十六进制字符串转换为Uint8Array
     const signatureBuffer = new Uint8Array(
-      signature.match(/.{1,2}/g)?.map((byte) => parseInt(byte, 16)) || []
+      signature.match(/.{1,2}/g)?.map((byte) => parseInt(byte, 16)) || [],
     );
 
     // 验证签名
@@ -88,7 +90,7 @@ async function verifySignature(
       'HMAC',
       key,
       signatureBuffer,
-      messageData
+      messageData,
     );
   } catch (error) {
     console.error('签名验证失败:', error);
@@ -99,7 +101,7 @@ async function verifySignature(
 // 处理认证失败的情况
 function handleAuthFailure(
   request: NextRequest,
-  pathname: string
+  pathname: string,
 ): NextResponse {
   // 如果是 API 路由，返回 401 状态码
   if (pathname.startsWith('/api')) {
@@ -124,14 +126,16 @@ function shouldSkipAuth(pathname: string): boolean {
     '/icons/',
     '/logo.png',
     '/screenshot.png',
+    '/sw.js',
+    '/workbox-',
   ];
 
   return skipPaths.some((path) => pathname.startsWith(path));
 }
 
-// 配置middleware匹配规则
+// 配置访问验证匹配规则
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|login|api/login|api/register|api/logout|api/cron|api/server-config).*)',
+    '/((?!_next/static|_next/image|favicon.ico|login|api/login|api/register|api/logout|api/server-config).*)',
   ],
 };
